@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"strings"
@@ -8,23 +9,6 @@ import (
 	"mcp-jira/internal/config"
 	"mcp-jira/pkg/jira"
 )
-
-type Comment struct {
-	Body CommentBody `json:"body"`
-}
-
-type CommentBody struct {
-	Content []ContentBlock `json:"content"`
-}
-
-type ContentBlock struct {
-	Content []TextNode `json:"content"`
-}
-
-type TextNode struct {
-	Text string `json:"text"`
-	Type string `json:"type"`
-}
 
 type JiraHandler struct {
 	client *jira.Client
@@ -36,15 +20,15 @@ func NewJiraHandler(cfg config.JiraConfig) *JiraHandler {
 	}
 }
 
-func (h *JiraHandler) GetIssueWithComments(params json.RawMessage) (interface{}, error) {
+func (h *JiraHandler) GetTaskWithComments(params json.RawMessage) (interface{}, error) {
 	var req struct {
-		Key string `json:"issue_key"`
+		Key string `json:"task_key"`
 	}
 	if err := json.Unmarshal(params, &req); err != nil {
 		return nil, fmt.Errorf("invalid params: %w", err)
 	}
 	if req.Key == "" {
-		return nil, fmt.Errorf("issue_key is required")
+		return nil, fmt.Errorf("task_key is required")
 	}
 
 	issue, err := h.client.GetIssue(req.Key)
@@ -52,14 +36,38 @@ func (h *JiraHandler) GetIssueWithComments(params json.RawMessage) (interface{},
 		return nil, fmt.Errorf("failed to get issue: %w", err)
 	}
 
-	refinamento := h.findRefinamentoComment(issue)
-
 	return map[string]interface{}{
-		"refinamento": refinamento,
+		"titulo":      fieldAsString(issue.Fields["summary"]),
+		"descricao":   fieldAsJSON(issue.Fields["description"]),
+		"refinamento": h.findRefinamentoComment(issue),
 	}, nil
 }
 
+func fieldAsString(field interface{}) string {
+	s, _ := field.(string)
+	return strings.TrimSpace(s)
+}
+
+func fieldAsJSON(field interface{}) string {
+	if field == nil {
+		return ""
+	}
+
+	raw, err := json.Marshal(field)
+	if err != nil {
+		return ""
+	}
+
+	var pretty bytes.Buffer
+	if err := json.Indent(&pretty, raw, "", "  "); err != nil {
+		return string(raw)
+	}
+	return pretty.String()
+}
+
 func (h *JiraHandler) findRefinamentoComment(issue *jira.Issue) string {
+	const phrase = "refinamento técnico"
+
 	commentField, ok := issue.Fields["comment"].(map[string]interface{})
 	if !ok {
 		return "Nenhum comentário de refinamento técnico encontrado"
@@ -76,31 +84,12 @@ func (h *JiraHandler) findRefinamentoComment(issue *jira.Issue) string {
 			continue
 		}
 
-		var comment Comment
-		if err := json.Unmarshal(commentJSON, &comment); err != nil {
+		if !strings.Contains(strings.ToLower(string(commentJSON)), phrase) {
 			continue
 		}
 
-		text := h.extractTextFromComment(comment)
-		if strings.Contains(strings.ToLower(text), "refinamento técnico") {
-			return text
-		}
+		return fieldAsJSON(c)
 	}
 
 	return "Nenhum comentário de refinamento técnico encontrado"
-}
-
-func (h *JiraHandler) extractTextFromComment(comment Comment) string {
-	var result strings.Builder
-
-	for _, block := range comment.Body.Content {
-		for _, node := range block.Content {
-			if node.Type == "text" {
-				result.WriteString(node.Text)
-			}
-		}
-		result.WriteString("\n")
-	}
-
-	return strings.TrimSpace(result.String())
 }

@@ -21,7 +21,7 @@ func main() {
 
 	jiraHandler := handlers.NewJiraHandler(cfg.Jira)
 
-	server.RegisterHandler("get_issue_with_comments", jiraHandler.GetIssueWithComments)
+	server.RegisterHandler("get_task_with_comments", jiraHandler.GetTaskWithComments)
 
 	log.Printf("Starting MCP server in %s mode", cfg.MCP.Mode)
 
