@@ -172,7 +172,16 @@ func (s *Server) handleRequest(req Request) (*Response, bool) {
 			return resp, true
 		}
 
-		resp.Result = result
+		resultJSON, _ := json.Marshal(result)
+		resp.Result = map[string]interface{}{
+			"content": []map[string]interface{}{
+				{
+					"type": "text",
+					"text": string(resultJSON),
+				},
+			},
+			"isError": false,
+		}
 
 	default:
 		resp.Error = &RPCError{-32601, "method not found"}
