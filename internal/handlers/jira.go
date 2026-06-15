@@ -65,6 +65,76 @@ func fieldAsJSON(field interface{}) string {
 	return pretty.String()
 }
 
+func (h *JiraHandler) CreateIssue(params json.RawMessage) (interface{}, error) {
+	var req struct {
+		ProjectKey  string `json:"project_key"`
+		Summary     string `json:"summary"`
+		Description string `json:"description"`
+		IssueType   string `json:"issue_type"`
+		ParentKey   string `json:"parent_key"`
+	}
+	if err := json.Unmarshal(params, &req); err != nil {
+		return nil, fmt.Errorf("invalid params: %w", err)
+	}
+	if req.Summary == "" {
+		return nil, fmt.Errorf("summary is required")
+	}
+	if req.ProjectKey == "" {
+		req.ProjectKey = "LED"
+	}
+	if req.IssueType == "" {
+		req.IssueType = "História"
+	}
+
+	createReq := jira.CreateIssueRequest{
+		Fields: jira.CreateIssueFields{
+			Project:   jira.ProjectRef{Key: req.ProjectKey},
+			Summary:   req.Summary,
+			IssueType: jira.IssueTypeRef{Name: req.IssueType},
+		},
+	}
+	if req.Description != "" {
+		createReq.Fields.Description = jira.TextToADF(req.Description)
+	}
+
+	isSubtask := strings.EqualFold(req.IssueType, "subtarefa") || strings.EqualFold(req.IssueType, "subtask")
+
+	if req.ParentKey != "" {
+		parent, err := h.client.GetIssue(req.ParentKey)
+		if err == nil {
+			if comps, ok := parent.Fields["components"].([]interface{}); ok && len(comps) > 0 {
+				createReq.Fields.Components = comps
+			}
+			if team, ok := parent.Fields["customfield_11096"].([]interface{}); ok && len(team) > 0 {
+				createReq.Fields.LEDTeam = team
+			}
+		}
+		if isSubtask {
+			createReq.Fields.Parent = &jira.ProjectRef{Key: req.ParentKey}
+		}
+	}
+
+	result, err := h.client.CreateIssue(createReq)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create issue: %w", err)
+	}
+
+	if req.ParentKey != "" && !isSubtask {
+		linkReq := jira.IssueLinkRequest{
+			Type:         jira.IssueLinkType{Name: "Epic to Story"},
+			OutwardIssue: jira.ProjectRef{Key: result.Key},
+			InwardIssue:  jira.ProjectRef{Key: req.ParentKey},
+		}
+		_ = h.client.CreateIssueLink(linkReq)
+	}
+
+	return map[string]interface{}{
+		"key": result.Key,
+		"id":  result.ID,
+		"url": result.URL,
+	}, nil
+}
+
 func (h *JiraHandler) findRefinamentoComment(issue *jira.Issue) string {
 	const phrase = "refinamento técnico"
 

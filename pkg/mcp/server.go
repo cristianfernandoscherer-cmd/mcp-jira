@@ -29,18 +29,21 @@ type RPCError struct {
 
 type Server struct {
 	handlers map[string]func(json.RawMessage) (interface{}, error)
+	schemas  map[string]map[string]interface{}
 	mode     string
 }
 
 func NewServer(mode string) *Server {
 	return &Server{
 		handlers: make(map[string]func(json.RawMessage) (interface{}, error)),
+		schemas:  make(map[string]map[string]interface{}),
 		mode:     mode,
 	}
 }
 
-func (s *Server) RegisterHandler(name string, fn func(json.RawMessage) (interface{}, error)) {
+func (s *Server) RegisterHandler(name string, schema map[string]interface{}, fn func(json.RawMessage) (interface{}, error)) {
 	s.handlers[name] = fn
+	s.schemas[name] = schema
 }
 
 func (s *Server) Start() error {
@@ -136,12 +139,14 @@ func (s *Server) handleRequest(req Request) (*Response, bool) {
 		tools := make([]map[string]interface{}, 0)
 
 		for name := range s.handlers {
+			schema := s.schemas[name]
+			if schema == nil {
+				schema = map[string]interface{}{"type": "object"}
+			}
 			tools = append(tools, map[string]interface{}{
 				"name":        name,
 				"description": fmt.Sprintf("Tool %s", name),
-				"inputSchema": map[string]interface{}{
-					"type": "object",
-				},
+				"inputSchema": schema,
 			})
 		}
 
