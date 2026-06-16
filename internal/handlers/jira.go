@@ -108,6 +108,13 @@ func (h *JiraHandler) CreateIssue(params json.RawMessage) (interface{}, error) {
 			if team, ok := parent.Fields["customfield_11096"].([]interface{}); ok && len(team) > 0 {
 				createReq.Fields.LEDTeam = team
 			}
+			if sprints, ok := parent.Fields["customfield_10020"].([]interface{}); ok && len(sprints) > 0 {
+				if sprint, ok := sprints[0].(map[string]interface{}); ok {
+					if id, ok := sprint["id"].(float64); ok {
+						createReq.Fields.Sprint = int(id)
+					}
+				}
+			}
 		}
 		if isSubtask {
 			createReq.Fields.Parent = &jira.ProjectRef{Key: req.ParentKey}

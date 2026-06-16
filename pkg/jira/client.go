@@ -36,6 +36,7 @@ type CreateIssueFields struct {
 	Parent      *ProjectRef   `json:"parent,omitempty"`
 	Components  []interface{} `json:"components,omitempty"`
 	LEDTeam     []interface{} `json:"customfield_11096,omitempty"` // "LED Team" — campo obrigatório no projeto LED
+	Sprint      interface{}   `json:"customfield_10020,omitempty"` // Sprint — herdado do pai quando disponível
 }
 
 type ProjectRef struct {
