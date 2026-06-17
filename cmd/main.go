@@ -55,6 +55,13 @@ func main() {
 				"type":        "string",
 				"description": "Chave da issue pai (ex: LED-53292)",
 			},
+			"labels": map[string]interface{}{
+				"type":        "array",
+				"description": "Categorias da issue (ex: [\"backend\"] ou [\"test\"])",
+				"items": map[string]interface{}{
+					"type": "string",
+				},
+			},
 		},
 		"required": []string{"summary"},
 	}, jiraHandler.CreateIssue)

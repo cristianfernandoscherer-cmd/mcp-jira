@@ -67,11 +67,12 @@ func fieldAsJSON(field interface{}) string {
 
 func (h *JiraHandler) CreateIssue(params json.RawMessage) (interface{}, error) {
 	var req struct {
-		ProjectKey  string `json:"project_key"`
-		Summary     string `json:"summary"`
-		Description string `json:"description"`
-		IssueType   string `json:"issue_type"`
-		ParentKey   string `json:"parent_key"`
+		ProjectKey  string   `json:"project_key"`
+		Summary     string   `json:"summary"`
+		Description string   `json:"description"`
+		IssueType   string   `json:"issue_type"`
+		ParentKey   string   `json:"parent_key"`
+		Labels      []string `json:"labels"`
 	}
 	if err := json.Unmarshal(params, &req); err != nil {
 		return nil, fmt.Errorf("invalid params: %w", err)
@@ -96,8 +97,12 @@ func (h *JiraHandler) CreateIssue(params json.RawMessage) (interface{}, error) {
 	if req.Description != "" {
 		createReq.Fields.Description = jira.TextToADF(req.Description)
 	}
+	if len(req.Labels) > 0 {
+		createReq.Fields.Labels = req.Labels
+	}
 
-	isSubtask := strings.EqualFold(req.IssueType, "subtarefa") || strings.EqualFold(req.IssueType, "subtask")
+	issueTypeLower := strings.ToLower(req.IssueType)
+	isSubtask := issueTypeLower == "subtarefa" || issueTypeLower == "subtask"
 
 	if req.ParentKey != "" {
 		parent, err := h.client.GetIssue(req.ParentKey)
@@ -115,9 +120,13 @@ func (h *JiraHandler) CreateIssue(params json.RawMessage) (interface{}, error) {
 					}
 				}
 			}
-		}
-		if isSubtask {
-			createReq.Fields.Parent = &jira.ProjectRef{Key: req.ParentKey}
+			if isSubtask {
+				createReq.Fields.Parent = &jira.ProjectRef{Key: req.ParentKey}
+			} else if grandparent, ok := parent.Fields["parent"].(map[string]interface{}); ok {
+				if gpKey, ok := grandparent["key"].(string); ok && gpKey != "" {
+					createReq.Fields.Parent = &jira.ProjectRef{Key: gpKey}
+				}
+			}
 		}
 	}
 
@@ -128,9 +137,9 @@ func (h *JiraHandler) CreateIssue(params json.RawMessage) (interface{}, error) {
 
 	if req.ParentKey != "" && !isSubtask {
 		linkReq := jira.IssueLinkRequest{
-			Type:         jira.IssueLinkType{Name: "Epic to Story"},
-			OutwardIssue: jira.ProjectRef{Key: result.Key},
-			InwardIssue:  jira.ProjectRef{Key: req.ParentKey},
+			Type:         jira.IssueLinkType{Name: "Parent-Child"},
+			OutwardIssue: jira.ProjectRef{Key: req.ParentKey},
+			InwardIssue:  jira.ProjectRef{Key: result.Key},
 		}
 		_ = h.client.CreateIssueLink(linkReq)
 	}
